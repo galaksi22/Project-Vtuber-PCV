@@ -1,61 +1,41 @@
-⚙️ Cara Menjalankan
-Clone Repo ini:
+5. Metodologi & Penjelasan Teknis
+Logika inti dari sistem ini bergantung pada perhitungan rasio geometri landmark wajah, bukan sekadar jarak piksel, sehingga sistem tetap akurat meskipun jarak wajah pengguna berubah-ubah terhadap kamera.
 
-Bash
+A. Eye Aspect Ratio (EAR) - Deteksi Mata
+EAR digunakan untuk menentukan keterbukaan mata. Rumus yang digunakan adalah perbandingan rata-rata jarak vertikal kelopak mata terhadap jarak horizontal sudut mata.
 
-git clone [https://github.com/galaksi22/Project-Vtuber-PCV.git](https://github.com/galaksi22/Project-Vtuber-PCV.git)
+Formula Logika:
+EAR > 0.28: Diklasifikasikan sebagai Normal (Aset Mata 3).
+0.20 < EAR < 0.28: Diklasifikasikan sebagai Squint (Aset Mata 2).
+EAR < 0.20: Diklasifikasikan sebagai Blink (Aset Mata 1).
+
+B. Mouth Aspect Ratio (MAR) - Deteksi Mulut
+Serupa dengan EAR, MAR menghitung rasio tinggi bukaan bibir bagian dalam terhadap lebar mulut.
+
+Formula Logika:
+MAR > 0.3: Diklasifikasikan sebagai Open (Mangap).
+MAR > 0.05: Diklasifikasikan sebagai Talk (Bicara).
+MAR < 0.05: Diklasifikasikan sebagai Idle (Diam).
+
+C. Head Pose Estimation (Orientasi)
+Sistem menentukan orientasi wajah dengan membandingkan posisi relatif titik hidung (nose tip landmark) terhadap titik pipi kiri dan kanan pada sumbu X.
+Jika rasio posisi hidung bergeser signifikan (< 0.35 atau > 0.65), sistem menganggap pengguna menoleh dan mengganti aset wajah dasar (Base Face) serta menyesuaikan perspektif mata menggunakan parameter Scale Y (efek pipih).
+
+6. Petunjuk Instalasi & Penggunaan
+   git clone [https://github.com/galaksi22/Project-Vtuber-PCV.git](https://github.com/galaksi22/Project-Vtuber-PCV.git)
 cd Project-Vtuber-PCV
-Install Library yang dibutuhkan:
 
-Bash
-
+Langkah 2: Instalasi Dependensi
+Pastikan Python telah terinstal, kemudian jalankan perintah berikut:
 pip install opencv-python mediapipe numpy
-Run Program: Pastikan webcam nyala, lalu ketik:
 
-Bash
-
+Langkah 3: Menjalankan Program
 python ProjectVtuber.py
-🎮 Shortcut Keyboard
-Pas program jalan, klik dulu jendelanya, terus pakai tombol ini:
 
-O : OPEN Control Panel (Buka Slider buat geser-geser aset).
-
-X : EXIT Control Panel (Tutup Slider biar bersih).
-
-S : SAVE Config (Simpan settingan posisi ke JSON).
-
-Q : QUIT (Keluar program).
-
-🧠 Penjelasan Teknis (Metode Tracking)
-Di project ini saya nggak cuma pakai deteksi wajah standar, tapi pakai perhitungan rasio biar akurat mau dekat atau jauh dari kamera.
-
-1. Deteksi Mata (EAR - Eye Aspect Ratio)
-Saya pakai rumus EAR buat ngitung rasio bukaan mata.
-
-Logikanya: Saya ambil 6 titik koordinat di mata. Kalau jarak vertikalnya memendek dibanding jarak horizontal, berarti lagi merem.
-
-Threshold:
-
-EAR > 0.28 : Mata Normal (Pakai aset mata 3)
-
-0.20 - 0.28: Mata Sayu (Pakai aset mata 2)
-
-EAR < 0.20 : Merem (Pakai aset mata 1)
-
-2. Deteksi Mulut (MAR - Mouth Aspect Ratio)
-Mirip kayak mata, tapi buat mulut.
-
-Threshold:
-
-MAR > 0.3 : Mangap Lebar (Open)
-
-MAR > 0.05: Ngomong (Talk)
-
-MAR < 0.05: Diam (Idle)
-
-3. Orientasi Kepala (Head Pose)
-Buat nentuin arah noleh, saya bandingin posisi titik hidung (nose tip) sama pipi kiri dan kanan.
-
-Kalau titik hidung geser drastis ke arah koordinat pipi kiri, berarti user lagi noleh kiri -> Program bakal nge-load gambar Muka_Kiri.png.
-
-Begitu juga buat kanan, atas, dan bawah.
+7. Kontrol Program (Keyboard Shortcuts)
+Saat jendela aplikasi aktif, pengguna dapat menggunakan tombol berikut untuk kontrol sistem:
+Tombol,Fungsi,Deskripsi
+O,OPEN Panel,Membuka jendela Control Panel untuk melakukan kalibrasi posisi aset.
+X,EXIT Panel,Menutup jendela Control Panel (Mode bersih).
+S,SAVE Config,Menyimpan seluruh parameter koordinat saat ini ke file JSON.
+Q,QUIT,Menghentikan program dan menutup aplikasi.
