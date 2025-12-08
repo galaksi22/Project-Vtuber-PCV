@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Project Akhir: Real-Time 2D VTuber 
 
 **Mata Kuliah:** Pengolah Citra dan Video (PCV)  
