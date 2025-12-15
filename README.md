@@ -1,104 +1,54 @@
-
-# Project Akhir: Real-Time 2D VTuber 
+# Project Akhir: Real-Time 2D VTuber Engine
 
 **Mata Kuliah:** Pengolah Citra dan Video (PCV)  
-**Topik:** Body Tracking with Character Animation  
+**Topik:** Body Tracking, Gesture Recognition, Face Tracking 
 
 ---
 
-
-**Nama** | **Alfito Ichsan Galaksi** |
-**NRP** | **5024231071** |
+| Identitas | Detail |
+| :--- | :--- |
+| **Nama** | **Alfito Ichsan Galaksi** |
+| **NRP** | **5024231071** |
 
 ---
 
 ## 1. Deskripsi Proyek
-Proyek ini bertujuan untuk mengembangkan sistem **Virtual YouTuber (VTuber) 2D** yang beroperasi secara real-time menggunakan input kamera (webcam). Sistem ini dibangun menggunakan bahasa pemrograman Python dengan memanfaatkan pustaka *Computer Vision* dan *Machine Learning*.
+Proyek ini bertujuan untuk mengembangkan sistem **Virtual YouTuber (VTuber) 2D** yang beroperasi secara *real-time* menggunakan input kamera tunggal (webcam). Sistem ini dibangun menggunakan Python dengan memanfaatkan **MediaPipe Holistic** untuk melacak wajah, tangan, dan postur tubuh secara simultan.
 
-Berbeda dengan filter wajah konvensional yang hanya menempelkan topeng (*masking*), sistem ini mengimplementasikan teknik **Layer Compositing**. Sistem membaca *landmark* wajah pengguna, menerjemahkannya menjadi parameter logika (state), dan merender aset gambar terpisah (mata, mulut, wajah dasar) secara dinamis sesuai dengan ekspresi dan orientasi kepala pengguna.
+Berbeda dengan sistem *face-tracking* sederhana, proyek ini mengimplementasikan **Procedural Animation** dan **Hybrid Tracking Logic**. Sistem tidak hanya menempelkan gambar, tetapi juga menghitung fisika sederhana (seperti pernapasan dan kemiringan tubuh) serta menggunakan logika "Garis Merah" (*thresholding*) untuk mendeteksi gestur tangan dengan presisi tinggi tanpa memerlukan peralatan *motion capture* mahal.
 
 ## 2. Fitur Utama & Kapabilitas
-Sistem ini telah dikembangkan dengan fitur-fitur teknis sebagai berikut:
 
-* **High-Fidelity Face Tracking:** Menggunakan *MediaPipe Face Mesh* yang mendeteksi 478 titik landmark wajah untuk akurasi tinggi.
-* **Independent Eye Blinking (Kedipan Mata Independen):** Sistem mampu memproses mata kiri dan kanan secara terpisah. Hal ini memungkinkan ekspresi asimetris seperti mengedipkan satu mata (*winking*).
-* **Gradual Eye State (Logika Mata Bertahap):** Implementasi tiga kondisi mata untuk realisme:
-    1.  **Normal:** Mata terbuka lebar.
-    2.  **Squint:** Mata setengah tertutup (ekspresi sayu/natural).
-    3.  **Blink:** Mata tertutup rapat.
-* **Advanced Mouth Tracking:** Deteksi kondisi mulut yang presisi (Diam, Bicara, Terbuka Lebar) menggunakan analisis rasio geometri bibir.
-* **Head Pose Estimation (Estimasi Orientasi Kepala):** Algoritma untuk mendeteksi arah tolehan kepala (Kiri, Kanan, Atas, Bawah) dan mengganti *base layer* wajah karakter secara otomatis.
-* **Smart Background System:** Fitur pemuatan latar belakang otomatis. Sistem akan memprioritaskan file `Background.png/jpg`, namun jika tidak tersedia, sistem akan otomatis beralih ke mode *Green Screen* jika ingin menggunakan untuk keperluan treaming.
-* **GUI Control Panel (Live Tuning):** Antarmuka grafis berbasis slider untuk kalibrasi posisi (X, Y), skala (lebar/tinggi), dan rotasi aset secara *real-time* tanpa perlu menghentikan program.
-* **Persistent Configuration:** Sistem penyimpanan konfigurasi otomatis berbasis JSON (`vtuber_config.json`), memastikan hasil kalibrasi pengguna tersimpan permanen.
+### A. Core Tracking (Pelacakan)
+* **Holistic Tracking:** Menggabungkan deteksi Wajah (478 landmark), Tangan (21 landmark per tangan), dan Pose Tubuh.
+* **Smart Arm Detection (Logika Garis Merah):** Menggunakan referensi posisi hidung sebagai garis batas (*threshold*). Jika pergelangan tangan melewati garis hidung, karakter otomatis mengangkat tangan, mengabaikan gangguan kecil pada jari.
+* **Finger Gesture Recognition:** Mendeteksi pose jari spesifik seperti: Angka 1-5, *Peace*, dan *Thumb Up*.
+
+### B. Procedural Animation (Animasi Otomatis)
+* **Dynamic Body Leaning (Sway):** Tubuh karakter miring secara halus mengikuti sudut bahu pengguna menggunakan interpolasi (*Smoothing Factor*) agar gerakan tidak kaku.
+* **Auto-Breathing (Pernapasan):** Simulasi gerakan dada naik-turun menggunakan fungsi gelombang sinus (*Sine Wave*) untuk memberikan kesan "hidup" saat karakter diam.
+
+### C. Visual & UI Enhancement
+* **Estetik Glassmorphism UI:** Antarmuka menu navigasi modern dengan latar belakang gradasi transparan dan border *rounded* yang elegan.
+* **Image Sharpening (Fitur K):** Implementasi filter konvolusi (kernel 3x3) untuk mempertajam visual karakter secara *real-time*.
+* **Seamless Background Transition:** Transisi latar belakang yang halus (*cross-dissolve*) saat mengganti *scene*.
 
 ## 3. Spesifikasi Lingkungan Pengembangan
-Proyek ini dikembangkan dan diuji coba pada lingkungan dengan spesifikasi pustaka sebagai berikut (berdasarkan `pip list`):
+Proyek ini dikembangkan menggunakan pustaka berikut. Pastikan Anda telah menginstalnya:
 
-| Pustaka / Library | Versi | Fungsi Utama |
-| :--- | :--- | :--- |
-| **Python** | 3.11.x | *Runtime Environment* utama. |
-| **opencv-python** | 4.11.0.86 | Manipulasi citra matriks, rendering visual, dan antarmuka GUI. |
-| **mediapipe** | 0.10.21 | Ekstraksi *Face Mesh Landmarks* (478 titik) secara *real-time*. |
-| **numpy** | 1.26.4 | Komputasi aljabar linear (perhitungan jarak Euclidean untuk EAR/MAR). |
-
-## 4. Struktur Direktori
-Struktur file dalam repositori ini disusun sebagai berikut:
-
-```text
-Project-Vtuber-PCV/
-│
-├── assets/                 # Direktori penyimpanan aset visual (Layering)
-│   ├── Muka_Depan.png      # Base wajah (Front)
-│   ├── Muka_Kiri.png       # Base wajah (Left)
-│   ├── Mata_Kanan_3.png    # Aset mata (Normal)
-│   ├── Mulut_1.png         # Aset mulut (Idle)
-│   ├── Background.png      # (Opsional) File latar belakang kustom
-│   └── ... (Aset lainnya)
-│
-├── vtuber_config.json      # File konfigurasi koordinat (Auto-generated by System)
-├── ProjectVtuber.py        # Kode sumber utama (Main Script)
-└── README.md               # Dokumentasi proyek
-=======
-5. Metodologi & Penjelasan Teknis
-Logika inti dari sistem ini bergantung pada perhitungan rasio geometri landmark wajah, bukan sekadar jarak piksel, sehingga sistem tetap akurat meskipun jarak wajah pengguna berubah-ubah terhadap kamera.
-
-A. Eye Aspect Ratio (EAR) - Deteksi Mata
-EAR digunakan untuk menentukan keterbukaan mata. Rumus yang digunakan adalah perbandingan rata-rata jarak vertikal kelopak mata terhadap jarak horizontal sudut mata.
-
-Formula Logika:
-EAR > 0.28: Diklasifikasikan sebagai Normal (Aset Mata 3).
-0.20 < EAR < 0.28: Diklasifikasikan sebagai Squint (Aset Mata 2).
-EAR < 0.20: Diklasifikasikan sebagai Blink (Aset Mata 1).
-
-B. Mouth Aspect Ratio (MAR) - Deteksi Mulut
-Serupa dengan EAR, MAR menghitung rasio tinggi bukaan bibir bagian dalam terhadap lebar mulut.
-
-Formula Logika:
-MAR > 0.3: Diklasifikasikan sebagai Open (Mangap).
-MAR > 0.05: Diklasifikasikan sebagai Talk (Bicara).
-MAR < 0.05: Diklasifikasikan sebagai Idle (Diam).
-
-C. Head Pose Estimation (Orientasi)
-Sistem menentukan orientasi wajah dengan membandingkan posisi relatif titik hidung (nose tip landmark) terhadap titik pipi kiri dan kanan pada sumbu X.
-Jika rasio posisi hidung bergeser signifikan (< 0.35 atau > 0.65), sistem menganggap pengguna menoleh dan mengganti aset wajah dasar (Base Face) serta menyesuaikan perspektif mata menggunakan parameter Scale Y (efek pipih).
-
-6. Petunjuk Instalasi & Penggunaan
-   git clone [https://github.com/galaksi22/Project-Vtuber-PCV.git](https://github.com/galaksi22/Project-Vtuber-PCV.git)
-cd Project-Vtuber-PCV
-
-Langkah 2: Instalasi Dependensi
-Pastikan Python telah terinstal, kemudian jalankan perintah berikut:
+```bash
 pip install opencv-python mediapipe numpy
-
-Langkah 3: Menjalankan Program
-python ProjectVtuber.py
-
-7. Kontrol Program (Keyboard Shortcuts)
-Saat jendela aplikasi aktif, pengguna dapat menggunakan tombol berikut untuk kontrol sistem:
-Tombol,Fungsi,Deskripsi
-O,OPEN Panel,Membuka jendela Control Panel untuk melakukan kalibrasi posisi aset.
-X,EXIT Panel,Menutup jendela Control Panel (Mode bersih).
-S,SAVE Config,Menyimpan seluruh parameter koordinat saat ini ke file JSON.
-Q,QUIT,Menghentikan program dan menutup aplikasi.
->>>>>>> 3f45c0f6f0087cf5ebc2c132b9f67c891bf03913
+Pustaka / LibraryFungsi UtamaPython 3.xRuntime Environment utama.OpenCV (cv2)Manipulasi citra, rendering visual, filter sharpening, dan UI drawing.MediaPipeEkstraksi Holistic Landmarks (Face, Hands, Pose).NumPyOperasi matriks untuk gradasi warna dan perhitungan geometri vektor.4. Struktur DirektoriPlaintextProject-Vtuber-PCV/
+│
+├── assets/                 # Direktori aset visual (PNG Layering)
+│   ├── badan_full.png      # Base body
+│   ├── dua_tangan_naik.png # Variasi gestur
+│   ├── Muka_Depan.png      # Base wajah
+│   ├── Background.png      # Latar belakang default
+│   └── ... (Aset mata, mulut, dan tangan lainnya)
+│
+├── vtuber_body.json        # Konfigurasi posisi TUBUH (Auto-save)
+├── vtuber_face.json        # Konfigurasi posisi WAJAH (Auto-save)
+├── ProjectVtuber.py        # Source code utama (Main Engine)
+└── pose_tracking.py        # Script eksternal (Pose Tracking)
+5. Metodologi & Logika TeknisA. Hierarki Prioritas Tangan (Arm Logic)Sistem menggunakan logika prioritas untuk menghindari glitch animasi:Zona Atas (Threshold Hidung): Jika koordinat Y Wrist < Nose, sistem memaksa state UP (Angkat Tangan), mengabaikan deteksi jari.Zona Bawah: Jika tangan di bawah, sistem baru menghitung jumlah jari untuk pose spesifik (misal: Dadah/5 Jari, Peace).B. Smoothing & PhysicsLeaning (Kemiringan): Menggunakan rumus Current = Current + (Target - Current) * SmoothFactor. Teknik ini mencegah gerakan patah-patah (jitter) saat pengguna miring cepat.Breathing (Nafas): Menggunakan rumus Y_Offset = Sin(Frame_Count * Speed) * Amplitude.C. UI RenderingPanel UI digambar manual menggunakan OpenCV dengan teknik Numpy Broadcasting untuk membuat gradasi warna vertikal (Biru Gelap ke Hitam) secara efisien tanpa memperlambat FPS (Frame per Second).6. Kontrol Program (Keyboard Shortcuts)Aplikasi ini memiliki sistem navigasi lengkap. Tekan tombol berikut saat jendela aktif:TombolFungsiDeskripsiHHide/Show MenuMenampilkan atau menyembunyikan panel bantuan navigasi.ESCKeluarMenutup aplikasi.PGlobal TransformMembuka editor posisi & skala karakter secara keseluruhan.OPart EditorMembuka editor untuk kalibrasi per bagian (Mata/Mulut/Leher).SSimpanMenyimpan konfigurasi posisi saat ini ke file JSON.XTutup EditorMenutup menu slider (P atau O).KSharpening(On/Off) Efek penajaman gambar agar karakter terlihat lebih detail.LLeaning (Sway)(On/Off) Animasi miring tubuh mengikuti bahu pengguna.ZBreathing(On/Off) Animasi bernafas otomatis (naik-turun).. / ,Ganti BGMengganti latar belakang ke file berikutnya/sebelumnya.Catatan: Menu Slider Editor dapat dikontrol presisi menggunakan Tombol Panah (Arrow Keys) pada keyboard.
