@@ -21,6 +21,11 @@ LEAN_SENSITIVITY = 10.0
 SMOOTH_FACTOR = 0.12 
 TRANSITION_FRAMES = 15 
 
+# --- CONFIG IMAGE PROCESSING (SHARPENING) ---
+SHARPEN_KERNEL = np.array([[0, -1, 0],
+                           [-1, 5, -1],
+                           [0, -1, 0]])
+
 # --- CONFIG FILES ---
 BODY_CONFIG_FILE = "vtuber_body.json"
 FACE_CONFIG_FILE = "vtuber_face.json"
@@ -161,9 +166,9 @@ def get_arm_pose(pose_lm):
     
     tilt_deg = calculate_body_tilt(pose_lm) 
     
-    ls, le, lw = lm[11], lm[13], lm[15] # Left Shoulder, Elbow, Wrist
-    rs, re, rw = lm[12], lm[14], lm[16] # Right Shoulder, Elbow, Wrist
-    nose = lm[0] # Titik 0: Hidung 
+    ls, le, lw = lm[11], lm[13], lm[15] 
+    rs, re, rw = lm[12], lm[14], lm[16] 
+    nose = lm[0] 
     
     OFFSET_UP_SENSITIVITY = 0.005 
     
@@ -488,24 +493,36 @@ class HybridTracker:
         st["nose_x"] = nose_x_norm
         return st
 
-# --- FUNGSI UI MODERN ESTETIK ---
+# --- FUNGSI UI MODERN ESTETIK (FIXED COLOR & SHARPNESS) ---
 def draw_ui_panel(img, x, y, w, h, transparency=0.6):
     overlay = img.copy()
-    COLOR_BG = (45, 35, 20)       # Dark Blue-Black (Elegant)
-    COLOR_BORDER = (255, 200, 0)  # Cyan/Emas Cerah (Border)
-    r = 15 # Radius sudut
     
-    # Isi (Fill) Panel
-    cv2.rectangle(overlay, (x+r, y), (x+w-r, y+h), COLOR_BG, -1)
-    cv2.rectangle(overlay, (x, y+r), (x+w, y+h-r), COLOR_BG, -1)
-    cv2.circle(overlay, (x+r, y+r), r, COLOR_BG, -1)
-    cv2.circle(overlay, (x+w-r, y+r), r, COLOR_BG, -1)
-    cv2.circle(overlay, (x+r, y+h-r), r, COLOR_BG, -1)
-    cv2.circle(overlay, (x+w-r, y+h-r), r, COLOR_BG, -1)
+    # Deteksi Channel (3=BGR, 4=BGRA)
+    channels = img.shape[2]
+    
+    # WARNA TEMA (BGR) - (50, 30, 20) -> Cool Navy Black
+    color_top = np.array([60, 40, 30])    
+    color_bot = np.array([20, 10, 5])     
+    COLOR_BORDER = (255, 200, 0)
+    
+    # 1. BUAT GRADIENT
+    v_gradient = np.linspace(color_top, color_bot, h).astype(np.uint8)
+    gradient_bg = np.tile(v_gradient[:, np.newaxis, :], (1, w, 1))
+    
+    # 2. CONVERT KE 4 CHANNEL JIKA INPUT IMAGE 4 CHANNEL
+    if channels == 4:
+        gradient_bg = cv2.cvtColor(gradient_bg, cv2.COLOR_BGR2BGRA)
+        COLOR_BORDER = (255, 200, 0, 255)
+    
+    # Tempel Gradient
+    overlay[y:y+h, x:x+w] = gradient_bg
+
+    # 3. BLEND & DRAW BORDER
     cv2.addWeighted(overlay, transparency, img, 1 - transparency, 0, img)
     
-    # Gambar Border (Garis Luar) Tipis
-    thick = 1
+    r = 15 # Radius sudut
+    thick = 2 # Tebal garis
+    
     cv2.line(img, (x+r, y), (x+w-r, y), COLOR_BORDER, thick)
     cv2.line(img, (x+r, y+h), (x+w-r, y+h), COLOR_BORDER, thick)
     cv2.line(img, (x, y+r), (x, y+h-r), COLOR_BORDER, thick)
@@ -524,7 +541,10 @@ def run_vtuber_app_loop(cap):
     
     show_ovr = False; show_glob = False; glob_init = False
     ovr_init = False; last_p = "none"; last_part = -1; curr_part_idx = 0
-    show_debug_ui = False 
+    show_debug_ui = False
+    
+    # --- STATUS AWAL ---
+    is_sharpening_enabled = False # Default: OFF
     
     PARTS_KEY = ["left_eye", "right_eye", "mouth", "neck", "head_transform"]
     PARTS_NAME = ["Mata Kiri", "Mata Kanan", "Mulut", "Leher", "Kepala"]
@@ -534,13 +554,24 @@ def run_vtuber_app_loop(cap):
     is_breathing_enabled = True 
     is_leaning_enabled = True    
     
-    # --- FONT & WARNA UI BARU ---
-    UI_FONT = cv2.FONT_HERSHEY_DUPLEX # Font lebih tegas dan bersih
+    # --- VARIABEL TRANSPARANSI YANG MUDAH DIUBAH DI SINI ---
+    PANEL_ALPHA = 0.6 # Ubah angka ini jika ingin panel lebih bening (misal 0.4) atau gelap (0.8)
+
+    # --- FONT & WARNA UI ---
+    UI_FONT = cv2.FONT_HERSHEY_DUPLEX 
     C_TITLE = (255, 255, 255) # Putih
-    C_LABEL = (230, 220, 100) # Cyan (Mirip referensi)
-    C_VAL   = (180, 210, 240) # Emas Pucat (Mirip referensi)
-    C_KEY   = (255, 200, 100) # Biru Cyan Terang (Tombol)
-    C_DESC  = (255, 255, 255) # Putih (Deskripsi)
+    C_LABEL = (230, 220, 100) # Cyan/Teal
+    C_VAL   = (180, 210, 240) # Emas Pucat
+    C_KEY   = (255, 200, 100) # Biru Cyan Terang
+    C_DESC  = (255, 255, 255) # Putih
+    
+    # Warna Indikator Baru (Sesuai UI)
+    C_ON_CYAN  = (255, 200, 0)   # Cyan untuk ON (Agar serasi border)
+    C_OFF_GREY = (80, 80, 80)    # Abu-abu redup untuk OFF
+    
+    # Warna Khusus Editor (Purple & Cyan)
+    C_EDIT_TITLE = (255, 0, 255) # Ungu Magenta (POSE MODE)
+    C_EDIT_VAL   = (255, 255, 0) # Cyan (EDITING)
 
     while True:
         ret, frame = cap.read()
@@ -588,20 +619,24 @@ def run_vtuber_app_loop(cap):
             elif char_key == ord('d'): return "SWITCH"
             elif char_key == ord('s'): 
                 save_config(OFFSETS)
-            elif char_key == ord('h'): 
+            
+            # --- FIX: TOMBOL ANTI CAPSLOCK (Check lower AND upper) ---
+            elif char_key in [ord('h'), ord('H')]: 
                 show_debug_ui = not show_debug_ui
-            elif char_key == ord('o'):
+            elif char_key in [ord('k'), ord('K')]: 
+                is_sharpening_enabled = not is_sharpening_enabled
+            elif char_key in [ord('o'), ord('O')]:
                 show_ovr = not show_ovr; 
                 if show_ovr: show_glob = False
-            elif char_key == ord('p'):
+            elif char_key in [ord('p'), ord('P')]:
                 show_glob = not show_glob; 
                 if show_glob: show_ovr = False
-            elif char_key == ord('x'): 
+            elif char_key in [ord('x'), ord('X')]: 
                 show_ovr = False; 
                 show_glob = False
-            elif char_key == ord('l'): 
+            elif char_key in [ord('l'), ord('L')]: 
                 is_leaning_enabled = not is_leaning_enabled
-            elif char_key == ord('z'): 
+            elif char_key in [ord('z'), ord('Z')]: 
                 is_breathing_enabled = not is_breathing_enabled
             
             if ren.bg_image_next is None:
@@ -727,33 +762,59 @@ def run_vtuber_app_loop(cap):
         
         view = ren.render(state, win_w, win_h, lean_angle=curr_lean, breath_offset=breath_y)
         
+        # --- APPLY SHARPENING ---
+        if is_sharpening_enabled:
+            view = cv2.filter2D(view, -1, SHARPEN_KERNEL)
+
         # --- UI MODERN & ESTETIK (REPLIKA REFERENSI) ---
         if show_debug_ui:
-            draw_ui_panel(view, 20, 20, 480, 380, transparency=0.7)
+            # Change width to 440 and height to 420 (Increased height to prevent overflow)
+            draw_ui_panel(view, 20, 20, 440, 365, transparency=PANEL_ALPHA) 
             
-            start_y = 50; left_x = 40; right_x = 210 # Posisi kolom
+            start_y = 50; left_x = 40; right_x = 210 
             
-            # 1. JUDUL
             cv2.putText(view, "== MENU NAVIGASI & STATUS ==", (left_x, start_y), UI_FONT, 0.5, C_TITLE, 1, cv2.LINE_AA)
             start_y += 30
             
-            # 2. STATUS (Kolom Label & Value)
-            # Background
+            # --- STATUS ---
             cv2.putText(view, "BACKGROUND:", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
             cv2.putText(view, f"{ren.bg_files[ren.bg_index] if ren.bg_files else 'None'}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
             start_y += 25
-            # Gesture
+            
             cv2.putText(view, "GESTURE :", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
             cv2.putText(view, f"{state['gesture']}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
             start_y += 25
-            # Sway Toggle
-            cv2.putText(view, "SWAY X/Y  :", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
-            cv2.putText(view, f"{'ON' if is_leaning_enabled or is_breathing_enabled else 'OFF'}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
-            start_y += 35 # Jarak ekstra sebelum shortcut
+            
+            # --- INDIKATOR GLOW (TERPISAH & RAPI) ---
+            cv2.putText(view, "EFFECTS   :", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
+            
+            # Baris 1 Efek: Sway (L) & Breath (Z)
+            # Sway
+            sway_col = C_ON_CYAN if is_leaning_enabled else C_OFF_GREY
+            cv2.circle(view, (right_x, start_y - 5), 5, sway_col, -1)
+            if is_leaning_enabled: cv2.circle(view, (right_x, start_y - 5), 8, sway_col, 1) # Glow ring
+            cv2.putText(view, "Sway (L)", (right_x + 15, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            
+            # Breath (Digeser agak jauh biar gak dempet)
+            breath_start_x = right_x + 110
+            breath_col = C_ON_CYAN if is_breathing_enabled else C_OFF_GREY
+            cv2.circle(view, (breath_start_x, start_y - 5), 5, breath_col, -1)
+            if is_breathing_enabled: cv2.circle(view, (breath_start_x, start_y - 5), 8, breath_col, 1)
+            cv2.putText(view, "Breath (Z)", (breath_start_x + 15, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            
+            start_y += 25 # Baris baru untuk Sharp
+            
+            # Baris 2 Efek: Sharp (K)
+            sharp_col = C_ON_CYAN if is_sharpening_enabled else C_OFF_GREY
+            cv2.circle(view, (right_x, start_y - 5), 5, sharp_col, -1)
+            if is_sharpening_enabled: cv2.circle(view, (right_x, start_y - 5), 8, sharp_col, 1)
+            cv2.putText(view, "Sharp (K)", (right_x + 15, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            
+            start_y += 35 
 
-            # 3. SHORTCUTS (Kolom Tombol & Deskripsi)
             shortcuts = [
                 ("[ESC]", "Keluar Program"),
+                ("[K]", "Toggle Efek Tajam (Sharpen)"),
                 ("[P]", "Global Transform (Posisi/Skala)"),
                 ("[O]", "Editor Bagian (Mata/Kepala)"),
                 ("[S]", "Simpan Konfigurasi"),
@@ -761,7 +822,7 @@ def run_vtuber_app_loop(cap):
                 ("[< / >]", "Ganti Background"),
                 ("[H]", "Sembunyikan Menu Ini")
             ]
-            shortcut_desc_x = 110 # Posisi kolom deskripsi
+            shortcut_desc_x = 110 
 
             for key, desc in shortcuts:
                 cv2.putText(view, key, (left_x, start_y), UI_FONT, 0.5, C_KEY, 1, cv2.LINE_AA)
@@ -769,11 +830,24 @@ def run_vtuber_app_loop(cap):
                 start_y += 25
                 
         else:
-            cv2.putText(view, "Tekan [H] untuk Bantuan/Menu", (15, 30), UI_FONT, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
+            # Change font thickness to 1 for "Tekan [H]"
+            cv2.putText(view, "Tekan [H] untuk Bantuan/Menu", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
         
-        if show_ovr: 
-            cv2.putText(view, f"POSE: {pose.upper()}", (20,100), UI_FONT, 0.6, (0,0,255), 1)
-            cv2.putText(view, f"EDIT: {PARTS_NAME[curr_part_idx]}", (20, 130), UI_FONT, 0.6, (0, 255, 255), 1)
+        if show_ovr:
+            # Changed color to Cyan/Gold to match theme and moved below panel (y=420)
+            base_y = 420
+            # Pastikan teks kanan tidak keluar layar
+            txt_pose = f"POSE MODE: {pose.upper()}"
+            txt_edit = f"EDITING  : {PARTS_NAME[curr_part_idx]}"
+            
+            (w_pose, _), _ = cv2.getTextSize(txt_pose, UI_FONT, 0.6, 1)
+            (w_edit, _), _ = cv2.getTextSize(txt_edit, UI_FONT, 0.6, 1)
+            
+            x_pose = win_w - w_pose - 40 # 40px dari kanan
+            x_edit = win_w - w_edit - 40
+            
+            cv2.putText(view, txt_pose, (x_pose, 50), UI_FONT, 0.6, C_EDIT_TITLE, 1, cv2.LINE_AA)
+            cv2.putText(view, txt_edit, (x_edit, 80), UI_FONT, 0.6, C_EDIT_VAL, 1, cv2.LINE_AA)
         
         cv2.imshow(WINDOW_NAME, view)
 
