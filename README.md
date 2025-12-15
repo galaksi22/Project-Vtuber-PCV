@@ -53,31 +53,6 @@ Project-Vtuber-PCV/
 └── pose_tracking.py        # Script eksternal (Opsional)
 ```
 
-Masalahnya ada pada tanda penutup code block (```) yang kurang atau terhapus setelah bagian struktur direktori.
-
-Di Markdown, jika Anda membuka blok kode dengan ```text, Anda wajib menutupnya lagi dengan ``` sebelum menulis teks biasa atau judul baru. Jika tidak, semua teks di bawahnya akan dianggap sebagai bagian dari kode tersebut (kotak abu-abu).
-
-Berikut adalah perbaikannya. Salin dan tempel bagian ini untuk menggantikan bagian No. 4 dan No. 5 di file Anda:
-
-Markdown
-
-## 4. Struktur Direktori
-```text
-Project-Vtuber-PCV/
-│
-├── assets/                 # Direktori aset visual (PNG Layering)
-│   ├── badan_full.png      # Base body
-│   ├── dua_tangan_naik.png # Variasi gestur
-│   ├── Muka_Depan.png      # Base wajah
-│   ├── Background.png      # Latar belakang default
-│   └── ... (Aset mata, mulut, dan tangan lainnya)
-│
-├── vtuber_body.json        # Konfigurasi posisi TUBUH (Auto-save)
-├── vtuber_face.json        # Konfigurasi posisi WAJAH (Auto-save)
-├── ProjectVtuber.py        # Source code utama (Main Engine)
-└── pose_tracking.py        # Script eksternal (Opsional)
-```
-
 5. Metodologi & Logika Teknis
    
 A. Hierarki Prioritas Tangan (Arm Logic)
