@@ -10,15 +10,16 @@ import sys
 
 # ================= KONFIGURASI UMUM =================
 ASSET_DIR = "assets"
-BG_FILENAME = "Background.png"
+BG_FILENAME = "Background.png" 
 WINDOW_NAME = "VTuber Final Engine"
 EXTERNAL_SCRIPT = "pose_tracking.py"
 
-# --- CONFIG ANIMASI (POHON/TREE SWAY) ---
+# --- CONFIG ANIMASI ---
 BREATH_SPEED = 0.08 
 BREATH_AMPLITUDE = 3 
-LEAN_SENSITIVITY = -60.0 
-SMOOTH_FACTOR = 0.15 
+LEAN_SENSITIVITY = 10.0 
+SMOOTH_FACTOR = 0.12 
+TRANSITION_FRAMES = 15 
 
 # --- CONFIG FILES ---
 BODY_CONFIG_FILE = "vtuber_body.json"
@@ -38,9 +39,8 @@ BODY_ASSETS_MAP = {
     "LEFT_1": "tangan_kiri_1.png", "LEFT_2": "tangan_kiri_2.png", "LEFT_3": "tangan_kiri_3.png", "LEFT_4": "tangan_kiri_4.png", "LEFT_5": "tangan_kiri_5.png",
 }
 
-# Menambahkan 'total_scale' default 100 (100%)
 DEFAULT_OFFSETS = {
-    "global_transform": {"x": 640, "y": 700, "body_scale": 60, "head_scale": 15, "total_scale": 100},
+    "global_transform": {"x": 640, "y": 700, "body_scale": 60, "head_scale": 15, "total_scale": 100, "bg_index": 0},
     "front": { "neck": [0, -50], "head_transform": [0, 100, 100], "left_eye": [800, 950, 100, 100, 0], "right_eye": [1200, 950, 100, 100, 0], "mouth": [1000, 1150, 100, 100, 0] }
 }
 for p in ["left", "right", "up", "down"]:
@@ -77,9 +77,10 @@ def load_config():
                 d = json.load(f)
                 if "global_transform" in d: 
                     combined["global_transform"] = d["global_transform"]
-                    # Ensure total_scale exists
                     if "total_scale" not in combined["global_transform"]:
                         combined["global_transform"]["total_scale"] = 100
+                    if "bg_index" not in combined["global_transform"]:
+                        combined["global_transform"]["bg_index"] = 0
                 for p in ["front", "left", "right", "up", "down"]:
                     if p in d and "neck" in d[p]: combined[p]["neck"] = d[p]["neck"]
         except: pass
@@ -98,7 +99,14 @@ def load_config():
 
 def save_config(data):
     body, face = {}, {}
-    body["global_transform"] = data["global_transform"]
+    body["global_transform"] = {
+        "x": data["global_transform"]["x"],
+        "y": data["global_transform"]["y"],
+        "body_scale": data["global_transform"]["body_scale"],
+        "head_scale": data["global_transform"]["head_scale"],
+        "total_scale": data["global_transform"]["total_scale"],
+        "bg_index": data["global_transform"].get("bg_index", 0) 
+    }
     for p in ["front", "left", "right", "up", "down"]:
         body[p] = { "neck": data[p]["neck"] }
         face[p] = { "head_transform": data[p]["head_transform"], "left_eye": data[p]["left_eye"], "right_eye": data[p]["right_eye"], "mouth": data[p]["mouth"] }
@@ -117,33 +125,21 @@ def calculate_3_point_angle(a, b, c):
     cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
     return np.degrees(np.arccos(np.clip(cosine_angle, -1.0, 1.0)))
 
-# --- FUNGSI BARU UNTUK MENGHITUNG SUDUT KEMIRINGAN TUBUH ---
 def calculate_body_tilt(pose_lm):
     lm = pose_lm.landmark
     p1 = lm[11] # Bahu Kiri
     p2 = lm[12] # Bahu Kanan
-    
-    # Sudut kemiringan bahu relatif terhadap horizontal
     angle_rad = math.atan2(p1.y - p2.y, p1.x - p2.x)
     return math.degrees(angle_rad) 
 
-# --- FUNGSI BARU UNTUK MEROTASI TITIK ---
 def rotate_point(p, center, angle_deg):
-    """Memutar titik landmark (p) di sekitar titik pusat (center) sebesar angle_deg."""
     angle_rad = math.radians(angle_deg)
-    
-    # Translasi ke asal (center menjadi (0,0))
     x_rel = p.x - center.x
     y_rel = p.y - center.y
-    
-    # Rotasi
     x_rot = x_rel * math.cos(angle_rad) - y_rel * math.sin(angle_rad)
     y_rot = x_rel * math.sin(angle_rad) + y_rel * math.cos(angle_rad)
-    
-    # Translasi kembali dan kembalikan hanya Y yang diputar
     return y_rot + center.y 
 
-# --- FUNGSI ROTASI DENGAN MATRIX (TIDAK BERUBAH) ---
 def rotate_image_safe(image, angle):
     if image is None: return None, None
     h, w = image.shape[:2]
@@ -156,39 +152,139 @@ def rotate_image_safe(image, angle):
     rotated = cv2.warpAffine(image, M, (nw, nh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0,0))
     return rotated, M
 
-def rotate_image_simple(image, angle):
-    if image is None: return None, 0, 0
-    h, w = image.shape[:2]
-    M = cv2.getRotationMatrix2D((w//2, h//2), angle, 1.0)
-    cos, sin = np.abs(M[0, 0]), np.abs(M[0, 1])
-    nw = int((h * sin) + (w * cos))
-    nh = int((h * cos) + (w * sin))
-    M[0, 2] += (nw / 2) - (w / 2)
-    M[1, 2] += (nh / 2) - (h / 2)
-    return cv2.warpAffine(image, M, (nw, nh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0,0)), (nw-w)//2, (nh-h)//2
-
-def rotate_point_orig(px, py, angle): # FUNGSI rotate_point ASLI (diubah namanya)
-    rad = math.radians(angle)
-    nx = px * math.cos(rad) - py * math.sin(rad)
-    ny = px * math.sin(rad) + py * math.cos(rad)
-    return int(nx), int(ny)
-
 OFFSETS = load_config()
 
-# --- CLASS RENDERER VTUBER (TIDAK BERUBAH) ---
+# --- FUNGSI get_arm_pose ---
+def get_arm_pose(pose_lm):
+    lm = pose_lm.landmark
+    status = {"left": "DOWN", "right": "DOWN"}
+    
+    tilt_deg = calculate_body_tilt(pose_lm) 
+    
+    ls, le, lw = lm[11], lm[13], lm[15] # Left Shoulder, Elbow, Wrist
+    rs, re, rw = lm[12], lm[14], lm[16] # Right Shoulder, Elbow, Wrist
+    nose = lm[0] # Titik 0: Hidung 
+    
+    OFFSET_UP_SENSITIVITY = 0.005 
+    
+    rotated_threshold_r_y = rotate_point(nose, rs, -tilt_deg) - OFFSET_UP_SENSITIVITY 
+    rotated_rw_y = rotate_point(rw, rs, -tilt_deg)
+    is_wrist_high_r = rotated_rw_y < rotated_threshold_r_y 
+
+    rotated_threshold_l_y = rotate_point(nose, ls, -tilt_deg) - OFFSET_UP_SENSITIVITY 
+    rotated_lw_y = rotate_point(lw, ls, -tilt_deg)
+    is_wrist_high_l = rotated_lw_y < rotated_threshold_l_y
+    
+    angle_l = calculate_3_point_angle(ls, le, lw)
+    angle_r = calculate_3_point_angle(rs, re, rw)
+    raw_t_left = abs(lw.y - ls.y) < 0.15 and abs(le.y - ls.y) < 0.15 and angle_l > 150
+    raw_t_right = abs(rw.y - rs.y) < 0.15 and abs(re.y - rs.y) < 0.15 and angle_r > 150
+    
+    if is_wrist_high_l: status["left"] = "UP"
+    if is_wrist_high_r: status["right"] = "UP"
+    
+    if raw_t_left and raw_t_right:
+        status["left"] = "T-POSE"
+        status["right"] = "T-POSE"
+    
+    status['tilt'] = tilt_deg
+    return status
+
+
+# --- CLASS RENDERER VTUBER ---
 class VTuberRenderer:
     def __init__(self):
-        self.assets = {}; self.bg_color = (0, 255, 0); self.bg_image = None; self.load_assets()
+        self.assets = {}; 
+        self.bg_color = (0, 255, 0); 
+        self.bg_image = None; 
+        
+        self.bg_files = self.get_bg_files()
+        
+        saved_index = OFFSETS["global_transform"].get("bg_index", 0)
+        num_files = len(self.bg_files)
+        self.bg_index = saved_index % num_files if num_files > 0 else 0
+        
+        self.bg_image_next = None 
+        self.transition_alpha = 1.0 
+        self.load_assets()
+
+    def get_bg_files(self):
+        supported_formats = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp']
+        files = []
+        for f in os.listdir(ASSET_DIR):
+            if ('background' in f.lower() or 'bg' in f.lower()):
+                for ext in supported_formats:
+                    if f.lower().endswith(ext):
+                        files.append(f)
+                        break
+        
+        if BG_FILENAME not in files and os.path.exists(os.path.join(ASSET_DIR, BG_FILENAME)):
+            files.insert(0, BG_FILENAME)
+            
+        return files
+
     def load_img(self, filename):
         path = os.path.join(ASSET_DIR, filename)
-        if not os.path.exists(path): path = path.replace(".png", ".jpg")
         if os.path.exists(path):
-            img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-            if img is not None: return cv2.cvtColor(img, cv2.COLOR_BGR2BGRA) if img.shape[2] == 3 else img
+            img = cv2.imread(path, cv2.IMREAD_UNCHANGED) 
+            if img is not None: 
+                if img.ndim == 3 and img.shape[2] == 3:
+                    return cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+                elif img.ndim == 3 and img.shape[2] == 4:
+                    return img
+                elif img.ndim == 2:
+                     return cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
         return np.zeros((10, 10, 4), dtype=np.uint8)
+
+    def start_bg_transition(self, direction=1): 
+        if not self.bg_files: 
+            print("[BG SHIFT FAILED] Tidak ada file background yang terdeteksi.")
+            return 
+        
+        num_files = len(self.bg_files)
+        next_index = (self.bg_index + direction + num_files) % num_files
+        next_filename = self.bg_files[next_index]
+        
+        temp_next_img = cv2.imread(os.path.join(ASSET_DIR, next_filename))
+        
+        if temp_next_img is not None:
+            if temp_next_img.ndim == 3 and temp_next_img.shape[2] == 3:
+                self.bg_image_next = cv2.cvtColor(temp_next_img, cv2.COLOR_BGR2BGRA)
+            elif temp_next_img.ndim == 2:
+                self.bg_image_next = cv2.cvtColor(temp_next_img, cv2.COLOR_GRAY2BGRA)
+            else: 
+                self.bg_image_next = temp_next_img
+                
+            self.bg_index = next_index
+            self.transition_alpha = 0.99 
+            print(f"[BG SHIFT] Mulai transisi ke: {self.bg_files[self.bg_index]}")
+            
+            OFFSETS["global_transform"]["bg_index"] = self.bg_index
+            
+        else:
+            self.bg_image_next = None
+            print(f"[BG SHIFT FAILED] Gambar BG {next_filename} gagal dimuat.")
+
     def load_assets(self):
-        bg_path = os.path.join(ASSET_DIR, BG_FILENAME)
-        if os.path.exists(bg_path): self.bg_image = cv2.imread(bg_path)
+        if self.bg_files:
+            bg_filename = self.bg_files[self.bg_index % len(self.bg_files)]
+            temp_img = cv2.imread(os.path.join(ASSET_DIR, bg_filename))
+            
+            if temp_img is not None:
+                if temp_img.ndim == 3 and temp_img.shape[2] == 3:
+                    self.bg_image = cv2.cvtColor(temp_img, cv2.COLOR_BGR2BGRA)
+                elif temp_img.ndim == 2:
+                    self.bg_image = cv2.cvtColor(temp_img, cv2.COLOR_GRAY2BGRA)
+                else:
+                    self.bg_image = temp_img
+            else:
+                 self.bg_image = None
+        else:
+            self.bg_image = None 
+            
+        self.bg_image_next = None 
+        self.transition_alpha = 1.0 
+
         self.assets = {
             "base": { "front": self.load_img("Muka_Depan.png"), "left": self.load_img("Muka_Kiri.png"), "right": self.load_img("Muka_Kanan.png"), "up": self.load_img("Muka_Atas.png"), "down": self.load_img("muka_bawah.png") },
             "eyes_left": { "normal": self.load_img("Mata_Kanan_2.png"), "wide": self.load_img("Mata_Kanan_3.png"), "blink": self.load_img("Mata_Kanan_1.png") },
@@ -199,6 +295,11 @@ class VTuberRenderer:
         for k, v in BODY_ASSETS_MAP.items(): self.assets["bodies"][k] = self.load_img(v)
     
     def smart_resize_bg(self, bg, target_w, target_h):
+        if bg is None: 
+            canvas = np.full((target_h, target_w, 4), 255, dtype=np.uint8)
+            canvas[:, :, 0:3] = self.bg_color # BGR
+            return canvas
+            
         h, w = bg.shape[:2]
         scale = max(target_w / w, target_h / h)
         new_w, new_h = int(w * scale), int(h * scale)
@@ -208,7 +309,22 @@ class VTuberRenderer:
         cropped = resized[y:y+target_h, x:x+target_w]
         if cropped.shape[1] != target_w or cropped.shape[0] != target_h:
             cropped = cv2.resize(cropped, (target_w, target_h))
+            
+        if cropped.ndim == 3 and cropped.shape[2] == 3:
+            return cv2.cvtColor(cropped, cv2.COLOR_BGR2BGRA)
         return cropped
+
+    def get_current_bg(self, win_w, win_h):
+        if self.transition_alpha >= 1.0 and self.bg_image_next is None:
+            return self.smart_resize_bg(self.bg_image, win_w, win_h)
+
+        current_bg = self.smart_resize_bg(self.bg_image, win_w, win_h)
+        next_bg = self.smart_resize_bg(self.bg_image_next, win_w, win_h)
+
+        if current_bg is not None and next_bg is not None and current_bg.shape == next_bg.shape:
+             blended = cv2.addWeighted(next_bg, 1.0 - self.transition_alpha, current_bg, self.transition_alpha, 0)
+             return blended
+        return current_bg
 
     def overlay(self, bg, fg, x, y):
         h_fg, w_fg = fg.shape[:2]; h_bg, w_bg = bg.shape[:2]
@@ -221,79 +337,49 @@ class VTuberRenderer:
         else: bg[y1:y2, x1:x2] = fg_crop
         return bg
 
-    # --- RENDERER V52: MASTER SCALE ---
     def render(self, state, win_w, win_h, lean_angle=0, breath_offset=0):
-        if self.bg_image is not None:
-            canvas = self.smart_resize_bg(self.bg_image, win_w, win_h)
-            if canvas.shape[2] == 3: canvas = cv2.cvtColor(canvas, cv2.COLOR_BGR2BGRA)
-        else:
-            canvas = np.full((win_h, win_w, 4), 255, dtype=np.uint8)
-            canvas[:, :, 0:3] = self.bg_color
+        canvas = self.get_current_bg(win_w, win_h)
 
         glob = OFFSETS["global_transform"]; BASE_W, BASE_H = 1280.0, 720.0
         win_scale = min(win_w / BASE_W, win_h / BASE_H)
         
-        # --- HITUNG SKALA TOTAL (MASTER SLIDER) ---
         total_scale_multiplier = glob.get("total_scale", 100) / 100.0
-        
-        # Terapkan Multiplier ke Body & Head
         b_scale = (max(5, glob["body_scale"]) / 100.0) * win_scale * total_scale_multiplier
         h_scale = (max(5, glob["head_scale"]) / 100.0) * win_scale * total_scale_multiplier
-        
-        # Factor untuk mengoreksi offset leher agar ikut membesar/mengecil
         neck_scale_ratio = win_scale * total_scale_multiplier
-        
-        # 1. ANCHOR POINT
         anchor_x = int(win_w * (glob["x"] / BASE_W))
         anchor_y = int(win_h * (glob["y"] / BASE_H)) 
-        
-        # 2. BODY
         gesture = state.get("gesture", "NORMAL")
         body_raw = self.assets["bodies"].get(gesture, self.assets["bodies"]["NORMAL"])
         bh, bw = body_raw.shape[:2]; nbw, nbh = int(bw * b_scale), int(bh * b_scale)
         body_res = cv2.resize(body_raw, (nbw, nbh), interpolation=cv2.INTER_AREA)
-        
         body_rot_img, M_body = rotate_image_safe(body_res, lean_angle)
-        
         orig_feet = np.array([nbw/2, nbh, 1])
         new_feet = M_body.dot(orig_feet)
         bx = int(anchor_x - new_feet[0])
         by = int(anchor_y - new_feet[1]) + int(breath_offset)
         canvas = self.overlay(canvas, body_rot_img, bx, by)
         
-        # 3. KEPALA
         pose = state["pose"]; p_data = OFFSETS.get(pose, OFFSETS["front"])
         h_trans = p_data.get("head_transform", [0, 100, 100])
         total_head_rot = h_trans[0] + lean_angle
-        
         h_str_x, h_str_y = max(10, h_trans[1])/100.0, max(10, h_trans[2])/100.0
         head_raw = self.assets["base"].get(pose, self.assets["base"]["front"])
         hh, hw = head_raw.shape[:2]; curr_hw, curr_hh = int(hw * h_scale * h_str_x), int(hh * h_scale * h_str_y)
-        
         head_rot_img, M_head = rotate_image_safe(cv2.resize(head_raw, (curr_hw, curr_hh), interpolation=cv2.INTER_AREA), total_head_rot)
-        
-        # Hitung Posisi Leher (Dengan Scale Correction)
         neck = p_data.get("neck", [0, -50])
-        
-        # Gunakan neck_scale_ratio agar offset leher ikut membesar jika Total Scale dibesarkan
         neck_img_x = (nbw / 2) + int(neck[0] * neck_scale_ratio)
         neck_img_y = int(neck[1] * neck_scale_ratio)
-        
         orig_neck = np.array([neck_img_x, neck_img_y, 1])
         new_neck_pos = M_body.dot(orig_neck)
-        
         final_neck_x = bx + new_neck_pos[0]
         final_neck_y = by + new_neck_pos[1]
-        
         head_anchor_orig = np.array([curr_hw/2, curr_hh, 1])
         head_anchor_new = M_head.dot(head_anchor_orig)
-        
         hx = int(final_neck_x - head_anchor_new[0])
         hy = int(final_neck_y - head_anchor_new[1])
-        
         canvas = self.overlay(canvas, head_rot_img, hx, hy)
         
-        # 4. FITUR WAJAH
         def draw_feature(img_key, param_key):
             raw = self.assets["eyes_left" if "left" in param_key else ("eyes_right" if "right" in param_key else "mouth")].get(img_key)
             if raw is None: return
@@ -302,22 +388,17 @@ class VTuberRenderer:
             extra_x, extra_y = 0, 0
             if param_key == "mouth" and img_key == "laugh":
                 fsx *= 0.25; fsy *= 0.25; extra_x = -20; extra_y = -100
-                
             fh, fw = raw.shape[:2]; nfw, nfh = int(fw * fsx), int(fh * fsy)
             f_res = cv2.resize(raw, (nfw, nfh), interpolation=cv2.INTER_AREA)
             f_rot, M_feat_local = rotate_image_safe(f_res, orot + total_head_rot)
-            
             feat_rel_x = (ox - 1000 + extra_x) * h_scale * h_str_x
             feat_rel_y = (oy - 1000 + extra_y) * h_scale * h_str_y
             feat_orig_x = (curr_hw / 2) + feat_rel_x
             feat_orig_y = (curr_hh / 2) + feat_rel_y
-            
             feat_vec = np.array([feat_orig_x, feat_orig_y, 1])
             feat_new_pos = M_head.dot(feat_vec)
-            
             fx = int(hx + feat_new_pos[0] - (f_rot.shape[1] / 2))
             fy = int(hy + feat_new_pos[1] - (f_rot.shape[0] / 2))
-            
             return self.overlay(canvas, f_rot, fx, fy)
 
         canvas = draw_feature(state["eyes_left"], "left_eye")
@@ -347,68 +428,54 @@ class HybridTracker:
             if fingers in [[0,1,1,1,0], [1,1,1,1,0]]: return "3"
             if fingers in [[0,1,0,0,0], [1,1,0,0,0]]: return "1"
         return "THUMB" if fingers == [1,0,0,0,0] else "NONE"
+    
     def get_eye_ratio(self, lm, pts):
         v = calc_dist(lm[pts[0]], lm[pts[1]]); h = calc_dist(lm[pts[2]], lm[pts[3]])
         return v / h if h > 0 else 0
+        
     def get_mouth_status(self, face_lm):
         lm = face_lm.landmark; ref = calc_dist(lm[33], lm[263])
         if ref == 0: return "1"
         ver, hor = calc_dist(lm[13], lm[14]) / ref, calc_dist(lm[61], lm[291]) / ref
         return "4" if hor > 0.60 else ("1" if ver < 0.06 else ("2" if ver < 0.30 else "3"))
     
-    # --- DETEKSI DIMODIFIKASI: LOGIKA LENGAN RELATIF (UP/DOWN) ---
     def detect(self, img):
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB); res = self.holistic.process(rgb)
-        st = {"pose": "front", "eyes_left": "normal", "eyes_right": "normal", "mouth": "idle", "gesture": "NORMAL"}
+        st = {"pose": "front", "eyes_left": "normal", "eyes_right": "normal", "mouth": "idle", "gesture": "NORMAL", "tilt": 0}
         
         nose_x_norm = 0.5 
         
         arm_l = "DOWN"; arm_r = "DOWN"; l_gest = "NONE"; r_gest = "NONE"; mouth_val = "1"
         
         if res.pose_landmarks:
+            pose_status = get_arm_pose(res.pose_landmarks)
+            arm_l = pose_status["left"]
+            arm_r = pose_status["right"]
+            st["tilt"] = pose_status["tilt"] 
             lm = res.pose_landmarks.landmark
             nose_x_norm = lm[0].x 
-            tilt_deg = calculate_body_tilt(res.pose_landmarks) # Hitung kemiringan
-            
-            # --- LOGIKA LENGAN RELATIF TERHADAP GARIS MERAH (HIDUNG) ---
-            ls, lw = lm[11], lm[15] # Bahu Kiri, Pergelangan Kiri
-            rs, rw = lm[12], lm[16] # Bahu Kanan, Pergelangan Kanan
-            nose = lm[0]            # Hidung
-            
-            # Rotasi semua titik ke sumbu tegak (menggunakan Bahu masing-masing sebagai pusat)
-            
-            # KIRI: Rotasi di sekitar Bahu Kiri
-            rotated_lw_y = rotate_point(lw, ls, -tilt_deg)
-            rotated_nose_l_y = rotate_point(nose, ls, -tilt_deg) # Ambang Batas Kiri
-            
-            # KANAN: Rotasi di sekitar Bahu Kanan
-            rotated_rw_y = rotate_point(rw, rs, -tilt_deg)
-            rotated_nose_r_y = rotate_point(nose, rs, -tilt_deg) # Ambang Batas Kanan
-            
-            # Deteksi UP Relatif (Lebih tinggi dari posisi Hidung yang diluruskan)
-            if rotated_lw_y < rotated_nose_l_y: arm_l = "UP"
-            if rotated_rw_y < rotated_nose_r_y: arm_r = "UP"
-            
-            # Logika T-POSE (TIDAK BERUBAH)
-            if (abs(lm[15].y-lm[11].y)<0.15 and abs(lm[13].y-lm[11].y)<0.15 and calculate_3_point_angle(lm[11],lm[13],lm[15])>150) and \
-               (abs(lm[16].y-lm[12].y)<0.15 and abs(lm[14].y-lm[12].y)<0.15 and calculate_3_point_angle(lm[12],lm[14],lm[16])>150):
-                arm_l = arm_r = "T-POSE"
-                
-        # --- LOGIKA GESTURE & POSE TUBUH (TIDAK BERUBAH) ---
+        
         if res.left_hand_landmarks: l_gest = self.get_detailed_gesture(self.get_finger_array(res.left_hand_landmarks), res.left_hand_landmarks, res.pose_landmarks)
         if res.right_hand_landmarks: r_gest = self.get_detailed_gesture(self.get_finger_array(res.right_hand_landmarks), res.right_hand_landmarks, res.pose_landmarks)
-        if l_gest == r_gest and l_gest in ["1","2","3","4","5"]: st["gesture"] = f"BOTH_{l_gest}"
-        elif arm_l == "T-POSE": st["gesture"] = "BOTH_T"
-        elif arm_l == "UP" and arm_r == "UP": st["gesture"] = "BOTH_UP"
-        # Perhatikan: Arm L dan Arm R di sini sudah menggunakan hasil deteksi RELATIF
-        elif arm_l == "UP": st["gesture"] = "RIGHT_UP" # Tangan Kiri naik (Right side of the screen)
-        elif arm_r == "UP": st["gesture"] = "LEFT_UP"  # Tangan Kanan naik (Left side of the screen)
+        
+        if arm_l == "T-POSE" or arm_r == "T-POSE": 
+            st["gesture"] = "BOTH_T"
+        elif arm_l == "UP" and arm_r == "UP": 
+            st["gesture"] = "BOTH_UP" 
+        elif arm_l == "UP": 
+            st["gesture"] = "RIGHT_UP" 
+        elif arm_r == "UP": 
+            st["gesture"] = "LEFT_UP"
+        
+        elif l_gest == r_gest and l_gest in ["1","2","3","4","5"]: 
+            st["gesture"] = f"BOTH_{l_gest}"
+        
         else:
             final_pose = "NORMAL"
             if r_gest in ["PEACE", "THUMB", "1", "2", "3", "4", "5"]: final_pose = f"LEFT_{r_gest}"
             if final_pose == "NORMAL" and l_gest in ["PEACE", "THUMB", "1", "2", "3", "4", "5"]: final_pose = f"RIGHT_{l_gest}"
             st["gesture"] = final_pose
-            
+        
         if res.face_landmarks:
             lm = res.face_landmarks.landmark; r = (lm[1].x - lm[234].x) / (lm[454].x - lm[234].x)
             st["pose"] = "left" if r < 0.35 else ("right" if r > 0.65 else ("up" if (lm[1].y - (lm[159].y + lm[386].y)/2) < 0.03 else ("down" if (lm[1].y - (lm[159].y + lm[386].y)/2) > 0.12 else "front")))
@@ -416,12 +483,40 @@ class HybridTracker:
             st["eyes_right"] = "blink" if self.get_eye_ratio(lm, [386, 374, 362, 263]) < 0.16 else ("wide" if self.get_eye_ratio(lm, [386, 374, 362, 263]) > 0.38 else "normal")
             mouth_val = self.get_mouth_status(res.face_landmarks)
             st["mouth"] = {"2": "talk", "3": "open", "4": "laugh"}.get(mouth_val, "idle")
+            
         st["debug"] = {"l_gest": l_gest, "r_gest": r_gest, "mouth_val": mouth_val}
         st["nose_x"] = nose_x_norm
         return st
 
+# --- FUNGSI UI MODERN ESTETIK ---
+def draw_ui_panel(img, x, y, w, h, transparency=0.6):
+    overlay = img.copy()
+    COLOR_BG = (45, 35, 20)       # Dark Blue-Black (Elegant)
+    COLOR_BORDER = (255, 200, 0)  # Cyan/Emas Cerah (Border)
+    r = 15 # Radius sudut
+    
+    # Isi (Fill) Panel
+    cv2.rectangle(overlay, (x+r, y), (x+w-r, y+h), COLOR_BG, -1)
+    cv2.rectangle(overlay, (x, y+r), (x+w, y+h-r), COLOR_BG, -1)
+    cv2.circle(overlay, (x+r, y+r), r, COLOR_BG, -1)
+    cv2.circle(overlay, (x+w-r, y+r), r, COLOR_BG, -1)
+    cv2.circle(overlay, (x+r, y+h-r), r, COLOR_BG, -1)
+    cv2.circle(overlay, (x+w-r, y+h-r), r, COLOR_BG, -1)
+    cv2.addWeighted(overlay, transparency, img, 1 - transparency, 0, img)
+    
+    # Gambar Border (Garis Luar) Tipis
+    thick = 1
+    cv2.line(img, (x+r, y), (x+w-r, y), COLOR_BORDER, thick)
+    cv2.line(img, (x+r, y+h), (x+w-r, y+h), COLOR_BORDER, thick)
+    cv2.line(img, (x, y+r), (x, y+h-r), COLOR_BORDER, thick)
+    cv2.line(img, (x+w, y+r), (x+w, y+h-r), COLOR_BORDER, thick)
+    cv2.ellipse(img, (x+r, y+r), (r, r), 180, 0, 90, COLOR_BORDER, thick)
+    cv2.ellipse(img, (x+w-r, y+r), (r, r), 270, 0, 90, COLOR_BORDER, thick)
+    cv2.ellipse(img, (x+w-r, y+h-r), (r, r), 0, 0, 90, COLOR_BORDER, thick)
+    cv2.ellipse(img, (x+r, y+h-r), (r, r), 90, 0, 90, COLOR_BORDER, thick)
+
 # ==============================================================================
-# BAGIAN 3: LOGIKA VTUBER APP (TIDAK BERUBAH)
+# BAGIAN 3: LOGIKA VTUBER APP 
 # ==============================================================================
 def run_vtuber_app_loop(cap):
     tr = HybridTracker()
@@ -429,14 +524,24 @@ def run_vtuber_app_loop(cap):
     
     show_ovr = False; show_glob = False; glob_init = False
     ovr_init = False; last_p = "none"; last_part = -1; curr_part_idx = 0
-    show_debug_ui = True 
+    show_debug_ui = False 
+    
     PARTS_KEY = ["left_eye", "right_eye", "mouth", "neck", "head_transform"]
     PARTS_NAME = ["Mata Kiri", "Mata Kanan", "Mulut", "Leher", "Kepala"]
     
-    # --- VARIABEL SMOOTHING ---
     curr_lean = 0
     frame_counter = 0
+    is_breathing_enabled = True 
+    is_leaning_enabled = True    
     
+    # --- FONT & WARNA UI BARU ---
+    UI_FONT = cv2.FONT_HERSHEY_DUPLEX # Font lebih tegas dan bersih
+    C_TITLE = (255, 255, 255) # Putih
+    C_LABEL = (230, 220, 100) # Cyan (Mirip referensi)
+    C_VAL   = (180, 210, 240) # Emas Pucat (Mirip referensi)
+    C_KEY   = (255, 200, 100) # Biru Cyan Terang (Tombol)
+    C_DESC  = (255, 255, 255) # Putih (Deskripsi)
+
     while True:
         ret, frame = cap.read()
         if not ret: break
@@ -444,39 +549,108 @@ def run_vtuber_app_loop(cap):
         frame_counter += 1
         state = tr.detect(cv2.flip(frame, 1)); pose = state["pose"]; dbg = state["debug"]
         
-        # --- LOGIKA TIANG BENDERA (LEAN) ---
-        lean_target = (state["nose_x"] - 0.5) * LEAN_SENSITIVITY
-        lean_target = max(-40, min(40, lean_target)) # Batas miring
+        lean_target = state.get("tilt", 0) * (LEAN_SENSITIVITY / -90.0) 
+        lean_target = max(-40, min(40, lean_target))
         
-        curr_lean = curr_lean + (lean_target - curr_lean) * SMOOTH_FACTOR
-        breath_y = math.sin(frame_counter * BREATH_SPEED) * BREATH_AMPLITUDE
+        if is_leaning_enabled:
+            curr_lean = curr_lean + (lean_target - curr_lean) * SMOOTH_FACTOR
+        else:
+            curr_lean = 0
+            
+        if is_breathing_enabled:
+            breath_y = math.sin(frame_counter * BREATH_SPEED) * BREATH_AMPLITUDE
+        else:
+            breath_y = 0
         
-        key = cv2.waitKey(1)
+        full_key = cv2.waitKeyEx(1)
         
-        if key != -1:
-            if key == 27: return "EXIT"
-            elif key & 0xFF == ord('d'): return "SWITCH"
-            elif key & 0xFF == ord('s'): save_config(OFFSETS)
-            elif key & 0xFF == ord('h'): show_debug_ui = not show_debug_ui
-            elif key & 0xFF == ord('o'):
+        if ren.transition_alpha < 1.0 and ren.bg_image_next is not None:
+            ren.transition_alpha -= (1.0 / TRANSITION_FRAMES) 
+            
+            if ren.transition_alpha <= 0.0:
+                ren.bg_image = ren.bg_image_next
+                ren.bg_image_next = None
+                ren.transition_alpha = 1.0 
+                save_config(OFFSETS)
+        
+        def update_val(window_name, trackbar_name, direction):
+            try:
+                pos = cv2.getTrackbarPos(trackbar_name, window_name)
+                new_pos = pos + direction
+                cv2.setTrackbarPos(trackbar_name, window_name, new_pos)
+            except:
+                pass
+        
+        if full_key != -1:
+            char_key = full_key & 0xFF
+            
+            if char_key == 27: return "EXIT"
+            elif char_key == ord('d'): return "SWITCH"
+            elif char_key == ord('s'): 
+                save_config(OFFSETS)
+            elif char_key == ord('h'): 
+                show_debug_ui = not show_debug_ui
+            elif char_key == ord('o'):
                 show_ovr = not show_ovr; 
                 if show_ovr: show_glob = False
-            elif key & 0xFF == ord('p'):
+            elif char_key == ord('p'):
                 show_glob = not show_glob; 
                 if show_glob: show_ovr = False
-            elif key & 0xFF == ord('x'): 
+            elif char_key == ord('x'): 
                 show_ovr = False; 
                 show_glob = False
+            elif char_key == ord('l'): 
+                is_leaning_enabled = not is_leaning_enabled
+            elif char_key == ord('z'): 
+                is_breathing_enabled = not is_breathing_enabled
+            
+            if ren.bg_image_next is None:
+                if char_key == ord('.') or char_key == ord('>'):
+                    ren.start_bg_transition(direction=1)
+                elif char_key == ord(',') or char_key == ord('<'):
+                    ren.start_bg_transition(direction=-1)
+            
+            if show_ovr:
+                if full_key == 2424832:   # PANAH KIRI
+                    update_val("EDITOR", "POS X / ROT", -1) 
+                    update_val("EDITOR", "ROTASI", -1) 
+                elif full_key == 2555904: # PANAH KANAN
+                    update_val("EDITOR", "POS X / ROT", 1) 
+                    update_val("EDITOR", "ROTASI", 1) 
+                elif full_key == 2490368: # PANAH ATAS
+                    update_val("EDITOR", "POS Y / S_X", -1) 
+                    update_val("EDITOR", "SCALE X", 1) 
+                    update_val("EDITOR", "SCALE Y", 1) 
+                elif full_key == 2621440: # PANAH BAWAH
+                    update_val("EDITOR", "POS Y / S_X", 1) 
+                    update_val("EDITOR", "SCALE X", -1) 
+                    update_val("EDITOR", "SCALE Y", -1)
+            
+            if show_glob:
+                if full_key == 2424832:   # PANAH KIRI (Pos X -)
+                    update_val("GLOBAL", "Pos X", -1)
+                    update_val("GLOBAL", "Body Sc", -1) 
+                    update_val("GLOBAL", "Head Sc", -1) 
+                elif full_key == 2555904: # PANAH KANAN (Pos X +)
+                    update_val("GLOBAL", "Pos X", 1)
+                    update_val("GLOBAL", "Body Sc", 1) 
+                    update_val("GLOBAL", "Head Sc", 1) 
+                elif full_key == 2490368: # PANAH ATAS (Pos Y -)
+                    update_val("GLOBAL", "Pos Y", -1)
+                    update_val("GLOBAL", "Total Sc", 1) 
+                elif full_key == 2621440: # PANAH BAWAH (Pos Y +)
+                    update_val("GLOBAL", "Pos Y", 1)
+                    update_val("GLOBAL", "Total Sc", -1) 
+
 
         if show_glob:
             if not glob_init:
                 cv2.namedWindow("GLOBAL"); cv2.resizeWindow("GLOBAL", 400, 300); glob_init = True
                 g = OFFSETS["global_transform"]
                 cv2.createTrackbar("Pos X", "GLOBAL", int(g["x"]), 1280, nothing)
-                cv2.createTrackbar("Pos Y", "GLOBAL", int(g["y"]), 1000, nothing)
+                cv2.createTrackbar("Pos Y", "GLOBAL", int(g["y"]), 2000, nothing) 
                 cv2.createTrackbar("Body Sc", "GLOBAL", int(g["body_scale"]), 200, nothing)
                 cv2.createTrackbar("Head Sc", "GLOBAL", int(g["head_scale"]), 100, nothing)
-                # SLIDER BARU: TOTAL SCALE (0 - 300%)
                 cv2.createTrackbar("Total Sc", "GLOBAL", int(g.get("total_scale", 100)), 300, nothing)
             try:
                 g = OFFSETS["global_transform"]
@@ -509,29 +683,35 @@ def run_vtuber_app_loop(cap):
                 curr_key = PARTS_KEY[curr_part_idx]
                 p_data = OFFSETS.get(pose, OFFSETS["front"])
                 
-                def upd(tb, d): cv2.setTrackbarPos(tb, "EDITOR", cv2.getTrackbarPos(tb, "EDITOR") + d)
-                if key != -1:
-                    if key == 2424832: upd("POS X / ROT", -1) 
-                    elif key == 2555904: upd("POS X / ROT", 1) 
-                    elif key == 2490368: upd("POS Y / S_X", -1) 
-                    elif key == 2621440: upd("POS Y / S_X", 1) 
-                    elif key & 0xFF == ord('z'): upd("SCALE X", -1); upd("SCALE Y", -1); (upd("POS Y / S_X", -1) if curr_part_idx == 4 else None)
-                    elif key & 0xFF == ord('c'): upd("SCALE X", 1); upd("SCALE Y", 1); (upd("POS Y / S_X", 1) if curr_part_idx == 4 else None)
-                    elif key & 0xFF == ord('a'): upd("ROTASI", -1) 
-                    elif key & 0xFF == ord('d'): upd("ROTASI", 1)
-
                 if curr_part_idx != last_part or pose != last_p:
                     v = p_data[curr_key]
-                    if curr_part_idx == 3: cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0]+500)); cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1]+500))
-                    elif curr_part_idx == 4: cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0]+180)); cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1])); cv2.setTrackbarPos("SCALE X", "EDITOR", int(v[2]))
-                    else: 
-                        cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0])); cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1])); cv2.setTrackbarPos("SCALE X", "EDITOR", int(v[2])); cv2.setTrackbarPos("SCALE Y", "EDITOR", int(v[3])); cv2.setTrackbarPos("ROTASI", "EDITOR", int(v[4]+180))
+                    if curr_part_idx == 3: # Neck [x, y]
+                        cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0]+500)); 
+                        cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1]+500))
+                        cv2.setTrackbarPos("SCALE X", "EDITOR", 100); 
+                        cv2.setTrackbarPos("SCALE Y", "EDITOR", 100); 
+                        cv2.setTrackbarPos("ROTASI", "EDITOR", 180); 
+                    elif curr_part_idx == 4: # Head Transform [rot, sc_x, sc_y]
+                        cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0]+180)); 
+                        cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1])); 
+                        cv2.setTrackbarPos("SCALE X", "EDITOR", int(v[2])); 
+                        cv2.setTrackbarPos("SCALE Y", "EDITOR", int(v[3])); 
+                        cv2.setTrackbarPos("ROTASI", "EDITOR", int(v[4]+180)); 
+                    else: # Mata/Mulut [ox, oy, sc_x, sc_y, orot]
+                        cv2.setTrackbarPos("POS X / ROT", "EDITOR", int(v[0])); 
+                        cv2.setTrackbarPos("POS Y / S_X", "EDITOR", int(v[1])); 
+                        cv2.setTrackbarPos("SCALE X", "EDITOR", int(v[2])); 
+                        cv2.setTrackbarPos("SCALE Y", "EDITOR", int(v[3])); 
+                        cv2.setTrackbarPos("ROTASI", "EDITOR", int(v[4]+180))
                     last_part, last_p = curr_part_idx, pose
                 else:
                     v = [cv2.getTrackbarPos(t, "EDITOR") for t in ["POS X / ROT", "POS Y / S_X", "SCALE X", "SCALE Y", "ROTASI"]]
-                    if curr_part_idx == 3: OFFSETS[pose]["neck"] = [v[0]-500, v[1]-500]
-                    elif curr_part_idx == 4: OFFSETS[pose]["head_transform"] = [v[0]-180, v[1], v[2]]
-                    else: OFFSETS[pose][curr_key] = [v[0], v[1], v[2], v[3], v[4]-180]
+                    if curr_part_idx == 3: 
+                        OFFSETS[pose]["neck"] = [v[0]-500, v[1]-500]
+                    elif curr_part_idx == 4:
+                        OFFSETS[pose]["head_transform"] = [v[0]-180, v[1], v[2]]
+                    else: 
+                        OFFSETS[pose][curr_key] = [v[0], v[1], v[2], v[3], v[4]-180]
             except: 
                 pass
         else:
@@ -541,27 +721,59 @@ def run_vtuber_app_loop(cap):
                 except: 
                     pass
                 ovr_init = False
-
-        # --- RENDER VTUBER (PASSING LEAN ANGLE) ---
+        
         try: rect = cv2.getWindowImageRect(WINDOW_NAME); win_w, win_h = (rect[2], rect[3]) if rect and rect[2] > 0 else (1280, 720)
         except: win_w, win_h = 1280, 720
         
         view = ren.render(state, win_w, win_h, lean_angle=curr_lean, breath_offset=breath_y)
         
+        # --- UI MODERN & ESTETIK (REPLIKA REFERENSI) ---
         if show_debug_ui:
-            text = f"L:{dbg['l_gest']} | R:{dbg['r_gest']} | M:{dbg['mouth_val']}"
-            (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            box_x, box_y = 20, 20
-            box_w, box_h = w_text + 20, h_text + 20
-            overlay = view.copy()
-            cv2.rectangle(overlay, (box_x, box_y), (box_x + box_w, box_y + box_h), (50, 50, 50), -1)
-            cv2.addWeighted(overlay, 0.7, view, 0.3, 0, view)
-            cv2.rectangle(view, (box_x, box_y), (box_x + box_w, box_y + box_h), (200, 200, 200), 2)
-            cv2.putText(view, text, (box_x + 10, box_y + h_text + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            draw_ui_panel(view, 20, 20, 480, 380, transparency=0.7)
+            
+            start_y = 50; left_x = 40; right_x = 210 # Posisi kolom
+            
+            # 1. JUDUL
+            cv2.putText(view, "== MENU NAVIGASI & STATUS ==", (left_x, start_y), UI_FONT, 0.5, C_TITLE, 1, cv2.LINE_AA)
+            start_y += 30
+            
+            # 2. STATUS (Kolom Label & Value)
+            # Background
+            cv2.putText(view, "BACKGROUND:", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
+            cv2.putText(view, f"{ren.bg_files[ren.bg_index] if ren.bg_files else 'None'}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            start_y += 25
+            # Gesture
+            cv2.putText(view, "GESTURE :", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
+            cv2.putText(view, f"{state['gesture']}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            start_y += 25
+            # Sway Toggle
+            cv2.putText(view, "SWAY X/Y  :", (left_x, start_y), UI_FONT, 0.5, C_LABEL, 1, cv2.LINE_AA)
+            cv2.putText(view, f"{'ON' if is_leaning_enabled or is_breathing_enabled else 'OFF'}", (right_x, start_y), UI_FONT, 0.5, C_VAL, 1, cv2.LINE_AA)
+            start_y += 35 # Jarak ekstra sebelum shortcut
+
+            # 3. SHORTCUTS (Kolom Tombol & Deskripsi)
+            shortcuts = [
+                ("[ESC]", "Keluar Program"),
+                ("[P]", "Global Transform (Posisi/Skala)"),
+                ("[O]", "Editor Bagian (Mata/Kepala)"),
+                ("[S]", "Simpan Konfigurasi"),
+                ("[X]", "Tutup Menu Editor/Global"),
+                ("[< / >]", "Ganti Background"),
+                ("[H]", "Sembunyikan Menu Ini")
+            ]
+            shortcut_desc_x = 110 # Posisi kolom deskripsi
+
+            for key, desc in shortcuts:
+                cv2.putText(view, key, (left_x, start_y), UI_FONT, 0.5, C_KEY, 1, cv2.LINE_AA)
+                cv2.putText(view, desc, (left_x + shortcut_desc_x, start_y), UI_FONT, 0.5, C_DESC, 1, cv2.LINE_AA)
+                start_y += 25
+                
+        else:
+            cv2.putText(view, "Tekan [H] untuk Bantuan/Menu", (15, 30), UI_FONT, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
         
         if show_ovr: 
-            cv2.putText(view, f"POSE: {pose.upper()}", (20,100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
-            cv2.putText(view, f"EDIT: {PARTS_NAME[curr_part_idx]}", (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.putText(view, f"POSE: {pose.upper()}", (20,100), UI_FONT, 0.6, (0,0,255), 1)
+            cv2.putText(view, f"EDIT: {PARTS_NAME[curr_part_idx]}", (20, 130), UI_FONT, 0.6, (0, 255, 255), 1)
         
         cv2.imshow(WINDOW_NAME, view)
 
