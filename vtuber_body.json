@@ -1,0 +1,39 @@
+{
+    "global_transform": {
+        "x": 632,
+        "y": 1000,
+        "body_scale": 35,
+        "head_scale": 7,
+        "total_scale": 125
+    },
+    "front": {
+        "neck": [
+            2,
+            153
+        ]
+    },
+    "left": {
+        "neck": [
+            -2,
+            145
+        ]
+    },
+    "right": {
+        "neck": [
+            3,
+            146
+        ]
+    },
+    "up": {
+        "neck": [
+            2,
+            153
+        ]
+    },
+    "down": {
+        "neck": [
+            1,
+            154
+        ]
+    }
+}
