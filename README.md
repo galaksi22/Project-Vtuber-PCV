@@ -35,6 +35,12 @@ Berbeda dengan sistem *face-tracking* sederhana, proyek ini mengimplementasikan 
 
 ## 3. Spesifikasi Lingkungan Pengembangan
 Proyek ini dikembangkan menggunakan pustaka berikut. Pastikan Anda telah menginstalnya:
+| Pustaka / Library | Fungsi Utama |
+| :--- | :--- |
+| **Python 3.x** | *Runtime Environment* utama. |
+| **OpenCV (`cv2`)** | Manipulasi citra, rendering visual, filter sharpening, dan UI drawing. |
+| **MediaPipe** | Ekstraksi *Holistic Landmarks* (Face, Hands, Pose). |
+| **NumPy** | Operasi matriks untuk gradasi warna dan perhitungan geometri vektor. |
 
 ## 4. Struktur Direktori
 ```text
