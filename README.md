@@ -64,14 +64,14 @@ Project-Vtuber-PCV/
 A. Hierarki Prioritas Tangan (Arm Logic)
 Sistem menggunakan logika prioritas untuk menghindari glitch animasi:
 Zona Atas (Threshold Hidung): Jika koordinat Y Wrist < Nose, sistem memaksa state UP (Angkat Tangan), mengabaikan deteksi jari.
-Zona Bawah: Jika tangan di bawah, sistem baru menghitung jumlah jari untuk pose spesifik (misal: Dadah/5 Jari, Peace).
+Zona Bawah: Jika tangan di bawah, sistem baru menghitung jumlah jari untuk pose spesifik (misal: 5 Jari, Peace).
 
 B. Smoothing & Physics
 Leaning (Kemiringan): Menggunakan rumus Current = Current + (Target - Current) * SmoothFactor. Teknik ini mencegah gerakan patah-patah (jitter) saat pengguna miring cepat.
 Breathing (Nafas): Menggunakan rumus Y_Offset = Sin(Frame_Count * Speed) * Amplitude.
 
 C. UI Rendering
-Panel UI digambar manual menggunakan OpenCV dengan teknik Numpy Broadcasting untuk membuat gradasi warna vertikal (Biru Gelap ke Hitam) secara efisien tanpa memperlambat FPS (Frame per Second).
+Panel UI digambar manual menggunakan OpenCV dengan teknik Numpy Broadcasting untuk membuat warna secara efisien tanpa memperlambat FPS (Frame per Second).
 
 | Tombol | Fungsi | Deskripsi |
 | :---: | :--- | :--- |
