@@ -56,7 +56,7 @@ Project-Vtuber-PCV/
 ├── vtuber_body.json        # Konfigurasi posisi TUBUH (Auto-save)
 ├── vtuber_face.json        # Konfigurasi posisi WAJAH (Auto-save)
 ├── ProjectVtuber.py        # Source code utama (Main Engine)
-└── pose_tracking.py        # Script eksternal (Opsional)
+└── pose_tracking.py        # Script eksternal ini berisi logika deteksi terpisah (Opsional)
 ```
 
 5. Metodologi & Logika Teknis
