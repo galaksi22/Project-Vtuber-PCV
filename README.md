@@ -1,104 +1,59 @@
+# 📂 Direktori Aset Visual (Assets)
 
-# Project Akhir: Real-Time 2D VTuber 
+Folder ini berisi seluruh komponen gambar yang digunakan oleh **VTuber Engine** untuk menyusun karakter secara *real-time*.
 
-**Mata Kuliah:** Pengolah Citra dan Video (PCV)  
-**Topik:** Body Tracking with Character Animation  
+## 1. Struktur & Penamaan File
+Sistem Python memuat gambar berdasarkan **nama file yang spesifik**. Jika Anda ingin mengubah karakter, **timpa (replace)** file gambar dengan nama yang sama persis, jangan mengubah nama filenya kecuali Anda juga mengubah kode program.
+
+### A. Wajah Dasar (Base Face)
+Gambar dasar kepala sesuai arah tolehan.
+* `Muka_Depan.png` - Wajah menghadap depan (Default).
+* `Muka_Kiri.png` - Wajah menoleh ke kiri.
+* `Muka_Kanan.png` - Wajah menoleh ke kanan.
+* `Muka_Atas.png` - Wajah menoleh ke atas.
+* `muka_bawah.png` - Wajah menoleh ke bawah.
+
+### B. Komponen Ekspresi
+Bagian-bagian wajah yang bergerak dinamis.
+* **Mata Kanan (User's Right):**
+  * `Mata_Kanan_2.png` - Mata Normal (Terbuka).
+  * `Mata_Kanan_3.png` - Mata Lebar/Terkejut (Wide).
+  * `Mata_Kanan_1.png` - Mata Tertutup (Blink).
+* **Mata Kiri (User's Left):**
+  * `Mata_Kiri_2.png` - Mata Normal (Terbuka).
+  * `Mata_Kiri_3.png` - Mata Lebar/Terkejut (Wide).
+  * `Mata_Kiri_1.png` - Mata Tertutup (Blink).
+* **Mulut:**
+  * `Mulut_1.png` - Diam (Idle/Senyum tipis).
+  * `Mulut_2.png` - Bicara (Talk).
+  * `Mulut_3.png` - Terbuka Lebar (Open/Surprised).
+  * `Mulut_4.png` - Tertawa (Laugh/Gigi terlihat).
+
+### C. Tubuh & Gestur Tangan
+* `badan_full.png` - Tubuh standar (tangan di bawah).
+* `dua_tangan_naik.png` - Pose kedua tangan naik (Sorak/Hooray).
+* `dua_tangan_T.png` - Pose T-Pose.
+* **Variasi Tangan Kanan & Kiri:**
+  * File dengan awalan `tangan_kanan_...` (misal: peace, jempol, 1-5).
+  * File dengan awalan `tangan_kiri_...` (misal: peace, jempol, 1-5).
+
+### D. Latar Belakang
+* `Background.png` - Latar belakang utama.
+* File gambar lain (`.jpg`, `.png`) di folder ini akan otomatis terdeteksi sebagai *background* alternatif yang bisa diganti dengan tombol `<` dan `>`.
 
 ---
 
+## 2. Spesifikasi Teknis Gambar (Penting!)
 
-**Nama** | **Alfito Ichsan Galaksi** |
-**NRP** | **5024231071** |
+Agar animasi berjalan lancar dan visual tidak rusak, perhatikan aturan berikut:
 
----
+1.  **Format Transparan (PNG):** Semua aset karakter (Mata, Mulut, Tubuh, Wajah) **WAJIB** berformat `.png` dengan *Transparent Background* (Alpha Channel). Jangan gunakan JPG untuk karakter.
+2.  **Dimensi Konsisten:** Disarankan agar `Muka_Depan.png` dan variasi arah lainnya memiliki resolusi kanvas yang sama agar transisi terlihat mulus.
+3.  **Cropping:** Aset mata dan mulut sebaiknya di-*crop* pas pada objeknya (tanpa terlalu banyak ruang kosong transparan di sekitarnya) untuk memudahkan kalibrasi posisi di program.
 
-## 1. Deskripsi Proyek
-Proyek ini bertujuan untuk mengembangkan sistem **Virtual YouTuber (VTuber) 2D** yang beroperasi secara real-time menggunakan input kamera (webcam). Sistem ini dibangun menggunakan bahasa pemrograman Python dengan memanfaatkan pustaka *Computer Vision* dan *Machine Learning*.
-
-Berbeda dengan filter wajah konvensional yang hanya menempelkan topeng (*masking*), sistem ini mengimplementasikan teknik **Layer Compositing**. Sistem membaca *landmark* wajah pengguna, menerjemahkannya menjadi parameter logika (state), dan merender aset gambar terpisah (mata, mulut, wajah dasar) secara dinamis sesuai dengan ekspresi dan orientasi kepala pengguna.
-
-## 2. Fitur Utama & Kapabilitas
-Sistem ini telah dikembangkan dengan fitur-fitur teknis sebagai berikut:
-
-* **High-Fidelity Face Tracking:** Menggunakan *MediaPipe Face Mesh* yang mendeteksi 478 titik landmark wajah untuk akurasi tinggi.
-* **Independent Eye Blinking (Kedipan Mata Independen):** Sistem mampu memproses mata kiri dan kanan secara terpisah. Hal ini memungkinkan ekspresi asimetris seperti mengedipkan satu mata (*winking*).
-* **Gradual Eye State (Logika Mata Bertahap):** Implementasi tiga kondisi mata untuk realisme:
-    1.  **Normal:** Mata terbuka lebar.
-    2.  **Squint:** Mata setengah tertutup (ekspresi sayu/natural).
-    3.  **Blink:** Mata tertutup rapat.
-* **Advanced Mouth Tracking:** Deteksi kondisi mulut yang presisi (Diam, Bicara, Terbuka Lebar) menggunakan analisis rasio geometri bibir.
-* **Head Pose Estimation (Estimasi Orientasi Kepala):** Algoritma untuk mendeteksi arah tolehan kepala (Kiri, Kanan, Atas, Bawah) dan mengganti *base layer* wajah karakter secara otomatis.
-* **Smart Background System:** Fitur pemuatan latar belakang otomatis. Sistem akan memprioritaskan file `Background.png/jpg`, namun jika tidak tersedia, sistem akan otomatis beralih ke mode *Green Screen* jika ingin menggunakan untuk keperluan treaming.
-* **GUI Control Panel (Live Tuning):** Antarmuka grafis berbasis slider untuk kalibrasi posisi (X, Y), skala (lebar/tinggi), dan rotasi aset secara *real-time* tanpa perlu menghentikan program.
-* **Persistent Configuration:** Sistem penyimpanan konfigurasi otomatis berbasis JSON (`vtuber_config.json`), memastikan hasil kalibrasi pengguna tersimpan permanen.
-
-## 3. Spesifikasi Lingkungan Pengembangan
-Proyek ini dikembangkan dan diuji coba pada lingkungan dengan spesifikasi pustaka sebagai berikut (berdasarkan `pip list`):
-
-| Pustaka / Library | Versi | Fungsi Utama |
-| :--- | :--- | :--- |
-| **Python** | 3.11.x | *Runtime Environment* utama. |
-| **opencv-python** | 4.11.0.86 | Manipulasi citra matriks, rendering visual, dan antarmuka GUI. |
-| **mediapipe** | 0.10.21 | Ekstraksi *Face Mesh Landmarks* (478 titik) secara *real-time*. |
-| **numpy** | 1.26.4 | Komputasi aljabar linear (perhitungan jarak Euclidean untuk EAR/MAR). |
-
-## 4. Struktur Direktori
-Struktur file dalam repositori ini disusun sebagai berikut:
-
-```text
-Project-Vtuber-PCV/
-│
-├── assets/                 # Direktori penyimpanan aset visual (Layering)
-│   ├── Muka_Depan.png      # Base wajah (Front)
-│   ├── Muka_Kiri.png       # Base wajah (Left)
-│   ├── Mata_Kanan_3.png    # Aset mata (Normal)
-│   ├── Mulut_1.png         # Aset mulut (Idle)
-│   ├── Background.png      # (Opsional) File latar belakang kustom
-│   └── ... (Aset lainnya)
-│
-├── vtuber_config.json      # File konfigurasi koordinat (Auto-generated by System)
-├── ProjectVtuber.py        # Kode sumber utama (Main Script)
-└── README.md               # Dokumentasi proyek
-=======
-5. Metodologi & Penjelasan Teknis
-Logika inti dari sistem ini bergantung pada perhitungan rasio geometri landmark wajah, bukan sekadar jarak piksel, sehingga sistem tetap akurat meskipun jarak wajah pengguna berubah-ubah terhadap kamera.
-
-A. Eye Aspect Ratio (EAR) - Deteksi Mata
-EAR digunakan untuk menentukan keterbukaan mata. Rumus yang digunakan adalah perbandingan rata-rata jarak vertikal kelopak mata terhadap jarak horizontal sudut mata.
-
-Formula Logika:
-EAR > 0.28: Diklasifikasikan sebagai Normal (Aset Mata 3).
-0.20 < EAR < 0.28: Diklasifikasikan sebagai Squint (Aset Mata 2).
-EAR < 0.20: Diklasifikasikan sebagai Blink (Aset Mata 1).
-
-B. Mouth Aspect Ratio (MAR) - Deteksi Mulut
-Serupa dengan EAR, MAR menghitung rasio tinggi bukaan bibir bagian dalam terhadap lebar mulut.
-
-Formula Logika:
-MAR > 0.3: Diklasifikasikan sebagai Open (Mangap).
-MAR > 0.05: Diklasifikasikan sebagai Talk (Bicara).
-MAR < 0.05: Diklasifikasikan sebagai Idle (Diam).
-
-C. Head Pose Estimation (Orientasi)
-Sistem menentukan orientasi wajah dengan membandingkan posisi relatif titik hidung (nose tip landmark) terhadap titik pipi kiri dan kanan pada sumbu X.
-Jika rasio posisi hidung bergeser signifikan (< 0.35 atau > 0.65), sistem menganggap pengguna menoleh dan mengganti aset wajah dasar (Base Face) serta menyesuaikan perspektif mata menggunakan parameter Scale Y (efek pipih).
-
-6. Petunjuk Instalasi & Penggunaan
-   git clone [https://github.com/galaksi22/Project-Vtuber-PCV.git](https://github.com/galaksi22/Project-Vtuber-PCV.git)
-cd Project-Vtuber-PCV
-
-Langkah 2: Instalasi Dependensi
-Pastikan Python telah terinstal, kemudian jalankan perintah berikut:
-pip install opencv-python mediapipe numpy
-
-Langkah 3: Menjalankan Program
-python ProjectVtuber.py
-
-7. Kontrol Program (Keyboard Shortcuts)
-Saat jendela aplikasi aktif, pengguna dapat menggunakan tombol berikut untuk kontrol sistem:
-Tombol,Fungsi,Deskripsi
-O,OPEN Panel,Membuka jendela Control Panel untuk melakukan kalibrasi posisi aset.
-X,EXIT Panel,Menutup jendela Control Panel (Mode bersih).
-S,SAVE Config,Menyimpan seluruh parameter koordinat saat ini ke file JSON.
-Q,QUIT,Menghentikan program dan menutup aplikasi.
->>>>>>> 3f45c0f6f0087cf5ebc2c132b9f67c891bf03913
+## 3. Cara Mengganti Karakter (Custom Avatar)
+1.  Siapkan gambar karakter Anda yang sudah dipecah per bagian (Mata, Mulut, Kepala, Tubuh).
+2.  Simpan di folder ini.
+3.  **Rename** gambar Anda sesuai daftar nama di atas (timpa file lama).
+4.  Jalankan program dan gunakan menu **Editor (`Tombol O`)** untuk menyesuaikan ulang posisi mata dan mulut jika bergeser.
+5.  Tekan **`S`** untuk menyimpan konfigurasi baru.
