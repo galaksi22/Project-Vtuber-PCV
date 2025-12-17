@@ -1,16 +1,16 @@
 {
     "global_transform": {
-        "x": 585,
-        "y": 1021,
+        "x": 600,
+        "y": 914,
         "body_scale": 35,
         "head_scale": 7,
-        "total_scale": 125,
-        "bg_index": 4
+        "total_scale": 94,
+        "bg_index": 12
     },
     "front": {
         "neck": [
-            2,
-            154
+            -320,
+            -400
         ]
     },
     "left": {
