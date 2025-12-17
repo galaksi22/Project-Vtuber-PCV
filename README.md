@@ -84,4 +84,5 @@ Panel UI digambar manual menggunakan OpenCV dengan teknik Numpy Broadcasting unt
 | **`Z`** | **Breathing** | (On/Off) Animasi bernafas otomatis (naik-turun). |
 | **`.` / `,`** | **Ganti BG** | Mengganti latar belakang ke file berikutnya/sebelumnya. |
 
-# Link Video Demo Vtuber: https://drive.google.com/file/d/1hIm1xg85SZnd_9NCEexyEhcE5rPbUQvd/view?usp=drive_link
+# Link Video Demo Vtuber: 
+https://drive.google.com/file/d/1hIm1xg85SZnd_9NCEexyEhcE5rPbUQvd/view?usp=drive_link
